@@ -3176,56 +3176,60 @@ If `bbdb-file' uses an outdated format, it is migrated to `bbdb-file-format'."
               bbdb-country-list nil)
 
         (bbdb-goto-first-record)
-        (dolist (record records)
-          ;; We assume that the markers for each record need to go at each
-          ;; newline.  If this is not the case, things can go *very* wrong.
-          (bbdb-debug
-            (unless (looking-at "\\[")
-              (error "BBDB corrupted: junk between records at %s" (point))))
+        (let ((seen-some-duplicates nil))
+          (dolist (record records)
+            ;; We assume that the markers for each record need to go at each
+            ;; newline.  If this is not the case, things can go *very* wrong.
+            (bbdb-debug
+              (unless (looking-at "\\[")
+                (error "BBDB corrupted: junk between records at %s" (point))))
 
-          (bbdb-cache-set-marker
-           (bbdb-record-set-cache record (make-vector bbdb-cache-length nil))
-           (point-marker))
-          (forward-line 1)
+            (bbdb-cache-set-marker
+             (bbdb-record-set-cache record (make-vector bbdb-cache-length nil))
+             (point-marker))
+            (forward-line 1)
 
-          ;; Set the completion lists
-          (dolist (phone (bbdb-record-phone record))
-            (add-to-list 'bbdb-phone-label-list (bbdb-phone-label phone) 'eq))
-          (dolist (address (bbdb-record-address record))
-            (add-to-list 'bbdb-address-label-list (bbdb-address-label address) 'eq)
-            (mapc (lambda (street) (bbdb-add-to-list 'bbdb-street-list street))
-                  (bbdb-address-streets address))
-            (bbdb-add-to-list 'bbdb-city-list (bbdb-address-city address))
-            (bbdb-add-to-list 'bbdb-state-list (bbdb-address-state address))
-            (bbdb-add-to-list 'bbdb-postcode-list (bbdb-address-postcode address))
-            (bbdb-add-to-list 'bbdb-country-list (bbdb-address-country address)))
-          (dolist (xfield (bbdb-record-xfields record))
-            (add-to-list 'bbdb-xfield-label-list (car xfield) 'eq))
-          (dolist (organization (bbdb-record-organization record))
-            (add-to-list 'bbdb-organization-list organization))
+            ;; Set the completion lists
+            (dolist (phone (bbdb-record-phone record))
+              (add-to-list 'bbdb-phone-label-list (bbdb-phone-label phone) 'eq))
+            (dolist (address (bbdb-record-address record))
+              (add-to-list 'bbdb-address-label-list (bbdb-address-label address) 'eq)
+              (mapc (lambda (street) (bbdb-add-to-list 'bbdb-street-list street))
+                    (bbdb-address-streets address))
+              (bbdb-add-to-list 'bbdb-city-list (bbdb-address-city address))
+              (bbdb-add-to-list 'bbdb-state-list (bbdb-address-state address))
+              (bbdb-add-to-list 'bbdb-postcode-list (bbdb-address-postcode address))
+              (bbdb-add-to-list 'bbdb-country-list (bbdb-address-country address)))
+            (dolist (xfield (bbdb-record-xfields record))
+              (add-to-list 'bbdb-xfield-label-list (car xfield) 'eq))
+            (dolist (organization (bbdb-record-organization record))
+              (add-to-list 'bbdb-organization-list organization))
 
-          (let ((name (bbdb-concat 'name-first-last
-                                   (bbdb-record-firstname record)
-                                   (bbdb-record-lastname record))))
-            (when (and (not bbdb-allow-duplicates)
-                       (bbdb-gethash name '(fl-name aka)))
-              ;; This does not check for duplicate mail fields.
-              ;; Yet under normal circumstances, this should really
-              ;; not be necessary each time BBDB is loaded as BBDB checks
-              ;; whether creating a new record or modifying an existing one
-              ;; results in duplicates.
-              ;; Alternatively, you can use `bbdb-search-duplicates'.
-              (message "Duplicate BBDB record encountered: %s" name)
-              (sit-for 1)))
+            (let ((name (bbdb-concat 'name-first-last
+                                     (bbdb-record-firstname record)
+                                     (bbdb-record-lastname record))))
+              (when (and (not bbdb-allow-duplicates)
+                         (bbdb-gethash name '(fl-name aka)))
+                ;; This does not check for duplicate mail fields.
+                ;; Yet under normal circumstances, this should really
+                ;; not be necessary each time BBDB is loaded as BBDB checks
+                ;; whether creating a new record or modifying an existing one
+                ;; results in duplicates.
+                ;; Alternatively, you can use `bbdb-search-duplicates'.
+                (message "Duplicate BBDB record encountered: %s" name)
+                (setq seen-some-duplicates t)))
 
-          ;; We hash every record even if it is a duplicate and
-          ;; `bbdb-allow-duplicates' is nil.  Otherwise, an unhashed
-          ;; record would not be available for things like completion
-          ;; (and we would not know which record to keeep and which one
-          ;; to hide).  We trust the user she knows what she wants
-          ;; if she keeps duplicate records in the database though
-          ;; `bbdb-allow-duplicates' is nil.
-          (bbdb-hash-record record))
+            ;; We hash every record even if it is a duplicate and
+            ;; `bbdb-allow-duplicates' is nil.  Otherwise, an unhashed
+            ;; record would not be available for things like completion
+            ;; (and we would not know which record to keeep and which one
+            ;; to hide).  We trust the user she knows what she wants
+            ;; if she keeps duplicate records in the database though
+            ;; `bbdb-allow-duplicates' is nil.
+            (bbdb-hash-record record))
+          (when seen-some-duplicates
+            (message "There are duplicate BBDB records! Check the *messages* buffer for details.")
+            (sit-for 2)))
 
         ;; We should remove those xfields from `bbdb-xfield-label-list'
         ;; that are handled automatically.  Yet those xfields that are
