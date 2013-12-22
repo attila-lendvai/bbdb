@@ -260,7 +260,7 @@ but not allowing for regexps."
                                     (or (bbdb-record-xfield record bbdb-default-xfield) "")))
                      ((eq (car ,xfield-re) '*)
                       ;; check all xfields
-                      (let ((labels bbdb-xfield-label-list) done tmp)
+                      (let ((labels (bbdb-xfield-label-list)) done tmp)
                         (if (bbdb-record-xfields record)
                             (while (and (not done) labels)
                               (setq tmp (bbdb-record-xfield record (car labels))
@@ -339,7 +339,7 @@ in either the name(s), organization, address, phone, mail, or xfields."
   "Display all BBDB records for which xfield FIELD matches REGEXP."
   (interactive
    (let ((field (completing-read "Xfield to search (RET for all): "
-                                 (mapcar 'list bbdb-xfield-label-list) nil t)))
+                                 (mapcar 'list (bbdb-xfield-label-list)) nil t)))
      (list (if (string= field "") '* (intern field))
            (bbdb-search-prompt (if (string= field "")
                                    "any xfield"
@@ -797,7 +797,7 @@ value of \"\", the default) means do not alter the address."
    (let* ((_ (bbdb-editable))
           (record (or (bbdb-current-record)
                       (error "Point not on a record")))
-          (list (append bbdb-xfield-label-list
+          (list (append (bbdb-xfield-label-list)
                         '(affix organization aka phone address mail)))
           (field "")
           (completion-ignore-case t)

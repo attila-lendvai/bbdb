@@ -790,7 +790,7 @@ For interactive calls, use car of `bbdb-mua-update-interactive-p'."
                      "Field: "
                      (mapcar 'symbol-name
                              (append '(name affix organization aka mail)
-                                     bbdb-xfield-label-list))))
+                                     (bbdb-xfield-label-list)))))
           bbdb-mua-edit-field)
         (bbdb-mua-update-interactive-p)))
 

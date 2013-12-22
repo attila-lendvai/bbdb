@@ -1356,6 +1356,13 @@ For merging xfield LABEL, this will use MERGE-FUN."
 (define-obsolete-variable-alias 'bbdb-merge-notes-function-alist
   'bbdb-merge-xfield-function-alist)
 
+(defcustom bbdb-boring-xfield-list '()
+  "The list of xfields that are boring for the user, i.e. should not be displayed or searched in (e.g. synchronization artifacts)."
+  :group 'bbdb-mua
+  ;; We cannot delay evaluation of the type, so we will call CUSTOM-DECLARE-VARIABLE later
+  ;; to set the type field dynamically based on the contents of BBDB-XFIELD-LABEL-LIST.
+  :type '(repeat (symbol)))
+
 (defcustom bbdb-mua-summary-unification-list
   '(name mail message-name message-mail message-address)
   "List of FIELDs considered by `bbdb-mua-summary-unify'.
@@ -2510,6 +2517,31 @@ Build and store it if necessary."
 Return nil if xfield LABEL is undefined."
   (cdr (assq label (bbdb-record-xfields record))))
 
+(defun bbdb-record-xfields* (record &optional unfiltered)
+  "For RECORD return the xfields. If UNFILTERED
+is NIL, then omit xfields listed in `bbdb-boring-xfield-list'."
+  (let ((xfields (bbdb-record-xfields record)))
+    (unless unfiltered
+      (setq xfields
+            (remove nil (mapcar (lambda (xfield)
+                                  (unless (memq (car xfield) bbdb-boring-xfield-list)
+                                    xfield))
+                                xfields))))
+    xfields))
+
+(defun bbdb-xfield-label-list (&optional unfiltered)
+  (let ((xfield-labels bbdb-xfield-label-list))
+    (unless unfiltered
+      (setq xfield-labels
+            (remove nil (mapcar (lambda (el)
+                                  (unless (memq el bbdb-boring-xfield-list)
+                                    el))
+                                xfield-labels))))
+    xfield-labels))
+
+(defun bbdb-xfield-label-list/notify-new (label)
+  (add-to-list 'bbdb-xfield-label-list label nil 'eq))
+
 ;; The values of xfields are always strings.  The following function
 ;; comes handy if we want to treat these values as symbols.
 (defun bbdb-record-xfield-intern (record label)
@@ -2532,7 +2564,7 @@ If VALUE is nil, remove xfield LABEL from RECORD.  Return VALUE."
   (if (memq label '(name firstname lastname affix organization
                          mail aka phone address xfields))
       (error "xfield label `%s' illegal" label))
-  (add-to-list 'bbdb-xfield-label-list label 'eq)
+  (bbdb-xfield-label-list/notify-new label)
   (if (eq label 'mail-alias)
       (setq bbdb-mail-aliases-need-rebuilt 'edit))
   (if (and value (string= "" value)) (setq value nil))
@@ -2794,7 +2826,7 @@ See also `bbdb-record-field'."
                ;; Ignore junk
                (when (and (cdr xfield) (not (string= "" (cdr xfield))))
                  (push xfield new-xfields)
-                 (add-to-list 'bbdb-xfield-label-list (car xfield) 'eq)))
+                 (bbdb-xfield-label-list/notify-new (car xfield))))
              (bbdb-record-set-xfields record new-xfields)))
 
           ;; Single xfield
@@ -3022,7 +3054,17 @@ copy it to `bbdb-file'."
               ;; initialized BBDB.
               bbdb-records nil))
 
-      (run-hooks 'bbdb-after-read-db-hook)))
+      (run-hooks 'bbdb-after-read-db-hook)
+
+      ;; let's update the :type field because now we have the list of xfield labels available
+      (custom-declare-variable
+       'bbdb-boring-xfield-list
+       '()
+       (get 'bbdb-boring-xfield-list 'variable-documentation)
+       :type `(repeat (choice ,@(mapcar (lambda (label)
+                                          `(const ,label))
+                                        (bbdb-xfield-label-list :all))
+                              (symbol))))))
 
   ;; return `bbdb-buffer'
   bbdb-buffer)
@@ -3201,7 +3243,7 @@ If `bbdb-file' uses an outdated format, it is migrated to `bbdb-file-format'."
               (bbdb-add-to-list 'bbdb-postcode-list (bbdb-address-postcode address))
               (bbdb-add-to-list 'bbdb-country-list (bbdb-address-country address)))
             (dolist (xfield (bbdb-record-xfields record))
-              (add-to-list 'bbdb-xfield-label-list (car xfield) 'eq))
+              (bbdb-xfield-label-list/notify-new (car xfield)))
             (dolist (organization (bbdb-record-organization record))
               (add-to-list 'bbdb-organization-list organization))
 
@@ -3672,7 +3714,10 @@ FIELD-LIST is the list of actually displayed FIELDS."
                    (bbdb-display-list aka 'aka "; "))))
             ;; xfields
             (t
-             (let ((xfield (assq field (bbdb-record-xfields record))))
+             ;; Our field-list is normally filtered already, but call
+             ;; BBDB-RECORD-XFIELDS* just in case we are not called from
+             ;; BBDB-DISPLAY-RECORD with a pre-filtered field list.
+             (let ((xfield (assq field (bbdb-record-xfields* record))))
                (if xfield
                    (bbdb-display-text (concat (replace-regexp-in-string
                                                "\n" "; " (cdr xfield)) "; ")
@@ -3738,7 +3783,10 @@ FIELD-LIST is the list of actually displayed FIELDS."
                  (bbdb-display-list aka 'aka "\n"))))
             ;; xfields
             (t
-             (let ((xfield (assq field (bbdb-record-xfields record))))
+             ;; Our field-list is normally filtered already, but call
+             ;; BBDB-RECORD-XFIELDS* just in case we are not called from
+             ;; BBDB-DISPLAY-RECORD with a pre-filtered field list.
+             (let ((xfield (assq field (bbdb-record-xfields* record))))
                (when xfield
                  (bbdb-display-text (format fmt field)
                                     `(xfields ,xfield field-label)
@@ -3767,7 +3815,7 @@ Move point to the end of the inserted record."
         (omit-list  (bbdb-layout-get-option layout 'omit)) ; omitted fields
         (order-list (bbdb-layout-get-option layout 'order)); requested field order
         (all-fields (append '(phone address mail aka) ; default field order
-                             (mapcar 'car (bbdb-record-xfields record))))
+                             (mapcar 'car (bbdb-record-xfields* record))))
         (beg (point))
         format-function field-list)
     (when (or (not display-p)
@@ -4223,7 +4271,8 @@ There are numerous hooks.  M-x apropos ^bbdb.*hook RET
                               (and (eq field 'aka) (bbdb-record-aka record))
                               (assq field (bbdb-record-xfields record)))))))
          (append '(affix organization aka phone address mail)
-                 '("--") bbdb-xfield-label-list))))
+                 '("--")
+                 (bbdb-xfield-label-list)))))
 
 (defun bbdb-mouse-menu (event)
   "BBDB mouse menu for EVENT,"
